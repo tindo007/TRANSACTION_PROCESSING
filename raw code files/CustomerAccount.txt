@@ -1,0 +1,4 @@
+﻿Public Class CustomerAccount
+    Public Property Number As String
+    Public Property Balance As Integer
+End Class

@@ -1,0 +1,149 @@
+﻿Imports System.Net.Mail
+Imports System.Diagnostics
+Imports System.Collections.Generic
+Imports System.IO
+
+
+Module Processor
+    ' Declaration of public properties
+    Public Property pendingDir As String = "C:\TRANSACTION_PROCESSING\pending"
+    Public Property processedDir As String = "C:\TRANSACTION_PROCESSING\processed"
+    Public Property reportsDir As String = "C:\TRANSACTION_PROCESSING\reports"
+
+
+    Sub Main()
+
+        ' Call and declare a new report object
+        Dim rpt As New TransactionsReport
+        Try
+            Dim csvList As String() = Directory.GetFiles(pendingDir, "*.csv")
+
+            ' Customer accounts  and balances list
+            Dim customerAccounts As New List(Of CustomerAccount)
+
+            ' Copy CSV file.
+            For Each f As String In csvList
+
+                ' Declare CSV file reader 
+                Dim fstream As IO.StreamReader
+                Dim tmpArr As Array
+                Dim count As Integer = 0
+
+                ' Remove path from the file name.
+                Dim fName As String = f.Substring(pendingDir.Length + 1)
+
+                ' Open the file
+                fstream = New IO.StreamReader(pendingDir & "\" & fName)
+                rpt.processedFileName = fName
+
+                ' Read through the file
+                While fstream.Peek > -1
+
+                    ' Get the current line and split it by comma's
+                    tmpArr = fstream.ReadLine.Split(",")
+                    If Not count = 0 Then
+                        Dim account_number, transaction_amount As String
+
+                        account_number = tmpArr(0)
+                        transaction_amount = tmpArr(1)
+
+                        ' Check if account number is numerical
+                        Dim verified_account_number As Integer
+                        If Integer.TryParse(account_number, verified_account_number) Then
+
+                            Dim repeatAccountFlag As Boolean = False
+
+                            ' Add to total transactions on csv file
+                            rpt.totalTransactions += 1
+
+                            ' Add transaction amount to credits or debits
+                            If transaction_amount > 0 Then
+                                rpt.totalCredits += transaction_amount
+                            Else
+                                rpt.totalDebits += transaction_amount
+                            End If
+
+                            ' Check if account is present on customer accounts list
+                            For Each acc As CustomerAccount In customerAccounts
+                                If acc.Number = account_number Then
+                                    acc.Balance += transaction_amount
+                                    repeatAccountFlag = True
+                                End If
+                            Next
+
+                            ' Add account if it wasn't present on customer accounts list 
+                            If Not repeatAccountFlag Then
+                                Dim acc As New CustomerAccount
+                                acc.Number = account_number
+                                acc.Balance += transaction_amount
+                                customerAccounts.Add(acc)
+                            End If
+
+                        Else
+                            ' Add to total skipped transactions
+                            rpt.skippedTransactions += 1
+
+                        End If
+
+                    End If
+                    count += 1
+                End While
+
+                ' Update the number of customer accounts on the customer transactions report
+                rpt.totalAccounts = customerAccounts.Count
+
+                ' Close the file stream
+                fstream.Close()
+
+                ' Write customer transactions report
+                WriteCustomerTransactionsReport(rpt)
+
+                ' Write customer transactions report
+                WriteAccountsReport(customerAccounts)
+
+                Try
+                    ' Will not overwrite if the destination file already exists.
+                    File.Copy(Path.Combine(pendingDir, fName), Path.Combine(processedDir, fName))
+
+                    ' Catch exception if the file was already copied.
+                Catch copyError As IOException
+                    Console.WriteLine(copyError.Message)
+                End Try
+            Next
+	    
+	    ' Removed the processed CSV file.
+            For Each f As String In csvList
+                File.Delete(f)
+            Next
+
+        Catch dirNotFound As DirectoryNotFoundException
+            Console.WriteLine(dirNotFound.Message)
+        End Try
+    End Sub
+
+    ' Customer Transactions Report writing method 
+    Sub WriteCustomerTransactionsReport(ByVal report As TransactionsReport)
+        Dim strFile As String = reportsDir & "\finance_customer_transactions_report-" & DateAndTime.Now.Day & DateAndTime.Now.Month & DateAndTime.Now.Year & DateAndTime.Now.ToFileTime & ".txt"
+        Using sw As New StreamWriter(File.Open(strFile, FileMode.OpenOrCreate))
+            sw.WriteLine("File Processed: " & report.processedFileName)
+            sw.WriteLine("Total Accounts: " & report.totalAccounts)
+            sw.WriteLine("Total Credits: " & FormatCurrency(report.totalCredits))
+            sw.WriteLine("Total Debits: " & FormatCurrency(report.totalDebits))
+            sw.WriteLine("Skipped Transactions: " & report.skippedTransactions)
+            sw.WriteLine("Date Processed: " & DateTime.Now.ToShortDateString & " - " & DateTime.Now.ToShortTimeString)
+        End Using
+    End Sub
+
+    ' Customer Accounts Report writing method
+    Sub WriteAccountsReport(ByVal customerAccounts As List(Of CustomerAccount))
+        Dim cnt As Integer = 1
+        Dim strFile As String = reportsDir & "\finance_customer_accounts_report-" & DateAndTime.Now.Day & DateAndTime.Now.Month & DateAndTime.Now.Year & DateAndTime.Now.ToFileTime & ".txt"
+        Using sw As New StreamWriter(File.Open(strFile, FileMode.OpenOrCreate))
+            For Each acc In customerAccounts
+                sw.WriteLine(cnt & ".  " & acc.Number & " - " & FormatCurrency(acc.Balance))
+                cnt += 1
+            Next
+        End Using
+    End Sub
+
+End Module

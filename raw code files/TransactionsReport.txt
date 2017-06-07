@@ -1,0 +1,8 @@
+﻿Public Class TransactionsReport
+    Public Property processedFileName As String
+    Public Property totalAccounts As Integer
+    Public Property totalTransactions As Integer
+    Public Property totalCredits As Double
+    Public Property totalDebits As Double
+    Public Property skippedTransactions As Integer
+End Class
